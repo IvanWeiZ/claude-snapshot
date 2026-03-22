@@ -1,0 +1,3 @@
+# Uncomment to exclude sensitive data from tracking
+# config/settings.local.json
+# memory/
