@@ -115,16 +115,11 @@ do_restore() {
 
   echo "Restoring config from repo..."
 
-  # Config files
+  # Config files (skip plugin metadata — plugins are reinstalled below)
   if [ -d "$REPO_DIR/config" ]; then
     for f in "$REPO_DIR"/config/*.json "$REPO_DIR"/config/*.md; do
       [ -f "$f" ] && cp "$f" "$CLAUDE_DIR/"
     done
-    # Plugin metadata
-    if [ -d "$REPO_DIR/config/plugins" ]; then
-      mkdir -p "$CLAUDE_DIR/plugins"
-      cp "$REPO_DIR"/config/plugins/*.json "$CLAUDE_DIR/plugins/" 2>/dev/null || true
-    fi
     echo "  Restored config files"
   fi
 
@@ -160,6 +155,35 @@ do_restore() {
 
   install_hook
   echo "  Re-registered snapshot hooks"
+
+  # Reinstall plugins if metadata exists
+  PLUGINS_META="$REPO_DIR/config/plugins/installed_plugins.json"
+  MARKETS_META="$REPO_DIR/config/plugins/known_marketplaces.json"
+  if [ -f "$PLUGINS_META" ] && command -v claude >/dev/null 2>&1; then
+    echo ""
+    echo "  Reinstalling plugins..."
+
+    # Add marketplaces first
+    if [ -f "$MARKETS_META" ]; then
+      for repo in $(jq -r '.[] | .source.repo // empty' "$MARKETS_META" 2>/dev/null); do
+        echo "    Marketplace: $repo"
+        claude plugin marketplace add "$repo" 2>/dev/null || true
+      done
+    fi
+
+    # Install each plugin
+    for plugin in $(jq -r '.plugins | keys[]' "$PLUGINS_META" 2>/dev/null); do
+      echo "    Installing: $plugin"
+      claude plugin install "$plugin" 2>/dev/null || echo "    (failed or already installed)"
+    done
+    echo "  Plugins restored"
+  elif [ -f "$PLUGINS_META" ]; then
+    echo ""
+    echo "  Note: 'claude' CLI not found. Install plugins manually:"
+    for plugin in $(jq -r '.plugins | keys[]' "$PLUGINS_META" 2>/dev/null); do
+      echo "    claude plugin install $plugin"
+    done
+  fi
 
   echo ""
   echo "Done! Config restored. Restart Claude Code to pick up changes."

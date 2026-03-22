@@ -46,8 +46,12 @@ setup_sandbox() {
   echo "# My Instructions" > "$CLAUDE_DIR/CLAUDE.md"
   echo '{"test": true}' > "$CLAUDE_DIR/settings.local.json"
 
-  echo '[]' > "$CLAUDE_DIR/plugins/installed_plugins.json"
-  echo '[]' > "$CLAUDE_DIR/plugins/known_marketplaces.json"
+  cat > "$CLAUDE_DIR/plugins/installed_plugins.json" << 'PJSON'
+{"version":1,"plugins":{"test-plugin@test-market":{"enabled":true}}}
+PJSON
+  cat > "$CLAUDE_DIR/plugins/known_marketplaces.json" << 'MJSON'
+{"test-market":{"source":{"source":"github","repo":"testuser/test-market"}}}
+MJSON
 
   echo '#!/bin/bash' > "$CLAUDE_DIR/hooks/my-hook.sh"
   chmod +x "$CLAUDE_DIR/hooks/my-hook.sh"

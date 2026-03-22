@@ -27,13 +27,13 @@ echo "Test: Snapshot hook re-registered after restore"
 [ -f "$CLAUDE_DIR/.snapshot-repo" ] && pass "Marker re-created" || fail "Marker missing"
 jq -e '.hooks.SessionStart' "$CLAUDE_DIR/settings.json" > /dev/null 2>&1 && pass "Hooks re-registered" || fail "Hooks not re-registered"
 
-# --- Plugin metadata restored ---
+# --- Plugin restore: attempts install or shows instructions ---
 echo ""
-echo "Test: Plugin metadata restored"
+echo "Test: Plugin restore shows instructions when CLI missing"
 reset_claude_dir
-bash "$REPO/setup.sh" --restore > /dev/null 2>&1
-
-[ -f "$CLAUDE_DIR/plugins/installed_plugins.json" ] && pass "Plugin metadata restored" || fail "Plugin metadata missing"
+# Hide claude CLI to force instruction-only path (no network calls)
+RESTORE_OUTPUT=$(PATH="/usr/bin:/bin:/usr/sbin:/sbin:$(dirname "$(command -v jq)"):$(dirname "$(command -v rsync)"):$(dirname "$(command -v git)")" bash "$REPO/setup.sh" --restore 2>&1)
+echo "$RESTORE_OUTPUT" | grep -q "test-plugin@test-market" && pass "Plugin install instructions shown" || fail "No plugin mention in restore output"
 
 # --- Restore with no config dir (graceful) ---
 echo ""
