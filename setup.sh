@@ -249,23 +249,22 @@ do_diff() {
     die "No git repo at $REPO_DIR. Run ./setup.sh first."
   fi
 
-  # Snapshot live config to repo (without committing) to see what would change
+  # Record HEAD before snapshot, then compare
+  BEFORE=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo "none")
+
+  # Run snapshot to capture current live config
   if [ -f "$HOOK_PATH" ]; then
     bash "$HOOK_PATH" < /dev/null 2>/dev/null || true
   fi
 
-  # Show uncommitted changes + changes since last commit
-  STAGED=$(git -C "$REPO_DIR" diff --cached --stat 2>/dev/null)
-  UNSTAGED=$(git -C "$REPO_DIR" diff --stat 2>/dev/null)
-  UNTRACKED=$(git -C "$REPO_DIR" ls-files --others --exclude-standard 2>/dev/null)
+  AFTER=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo "none")
 
-  if [ -z "$STAGED" ] && [ -z "$UNSTAGED" ] && [ -z "$UNTRACKED" ]; then
-    echo "No changes since last snapshot."
-  else
-    echo "Changes since last snapshot:"
+  if [ "$BEFORE" != "$AFTER" ]; then
+    echo "Changes captured in new snapshot:"
     echo ""
-    # Show the stat from the most recent commit (which was just created by snapshot)
     git -C "$REPO_DIR" log -1 --stat --format="" 2>/dev/null
+  else
+    echo "No changes since last snapshot."
   fi
 }
 
