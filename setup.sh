@@ -14,7 +14,7 @@ MARKER="$CLAUDE_DIR/.snapshot-repo"
 SETTINGS="$CLAUDE_DIR/settings.json"
 
 # Resolved absolute path for hook command (Claude Code requires absolute paths)
-HOOK_CMD="bash $HOME/.claude/hooks/$HOOK_FILE"
+HOOK_CMD="bash $CLAUDE_DIR/hooks/$HOOK_FILE"
 
 # --- Helpers ---
 
@@ -25,6 +25,14 @@ check_prereqs() {
     command -v "$cmd" >/dev/null || die "$cmd is required but not installed"
   done
   [ -d "$CLAUDE_DIR" ] || die "$CLAUDE_DIR not found. Install Claude Code first: https://docs.anthropic.com/en/docs/claude-code"
+}
+
+install_hook() {
+  mkdir -p "$CLAUDE_DIR/hooks"
+  cp "$REPO_DIR/snapshot.sh" "$HOOK_PATH"
+  chmod +x "$HOOK_PATH"
+  echo "$REPO_DIR" > "$MARKER"
+  register_hooks
 }
 
 register_hooks() {
@@ -79,19 +87,8 @@ do_install() {
 
   echo "Installing claude-snapshot..."
 
-  # Copy hook script
-  mkdir -p "$CLAUDE_DIR/hooks"
-  cp "$REPO_DIR/snapshot.sh" "$HOOK_PATH"
-  chmod +x "$HOOK_PATH"
-  echo "  Copied snapshot hook to $HOOK_PATH"
-
-  # Write repo location marker
-  echo "$REPO_DIR" > "$MARKER"
-  echo "  Repo path saved to $MARKER"
-
-  # Register hooks in settings.json
-  register_hooks
-  echo "  Hooks registered in settings.json"
+  install_hook
+  echo "  Hook installed and registered in settings.json"
 
   # Init git repo if needed
   if [ ! -d "$REPO_DIR/.git" ]; then
@@ -161,12 +158,7 @@ do_restore() {
     echo "  Restored agents"
   fi
 
-  # Re-register hooks
-  mkdir -p "$CLAUDE_DIR/hooks"
-  cp "$REPO_DIR/snapshot.sh" "$HOOK_PATH"
-  chmod +x "$HOOK_PATH"
-  echo "$REPO_DIR" > "$MARKER"
-  register_hooks
+  install_hook
   echo "  Re-registered snapshot hooks"
 
   echo ""
@@ -197,17 +189,114 @@ do_uninstall() {
   echo "Done! Your config repo is still at: $REPO_DIR"
 }
 
+# --- Status ---
+
+do_status() {
+  echo "claude-snapshot status"
+  echo ""
+
+  # Hook installed?
+  if [ -f "$HOOK_PATH" ]; then
+    echo "  Hook:   $HOOK_PATH (installed)"
+  else
+    echo "  Hook:   not installed"
+  fi
+
+  # Marker / repo path
+  if [ -f "$MARKER" ]; then
+    SAVED_REPO=$(cat "$MARKER")
+    if [ -d "$SAVED_REPO/.git" ]; then
+      COMMIT_COUNT=$(git -C "$SAVED_REPO" rev-list --count HEAD 2>/dev/null || echo "0")
+      LAST_COMMIT=$(git -C "$SAVED_REPO" log -1 --format="%ar" 2>/dev/null || echo "never")
+      echo "  Repo:   $SAVED_REPO ($COMMIT_COUNT commits, last: $LAST_COMMIT)"
+    else
+      echo "  Repo:   $SAVED_REPO (not a git repo)"
+    fi
+  else
+    echo "  Repo:   not configured"
+  fi
+
+  # Hooks registered in settings.json?
+  if [ -f "$SETTINGS" ] && jq -e ".hooks.SessionStart[]? | select(.hooks[]?.command == \"$HOOK_CMD\")" "$SETTINGS" > /dev/null 2>&1; then
+    echo "  Hooks:  registered in settings.json"
+  else
+    echo "  Hooks:  not registered in settings.json"
+  fi
+
+  # Auto-push?
+  if [ "${CLAUDE_SNAPSHOT_PUSH:-0}" = "1" ]; then
+    echo "  Push:   enabled (CLAUDE_SNAPSHOT_PUSH=1)"
+  else
+    echo "  Push:   disabled (set CLAUDE_SNAPSHOT_PUSH=1 to enable)"
+  fi
+
+  # What's tracked
+  echo ""
+  echo "  Tracking:"
+  for category in config hooks commands scripts agents skills memory; do
+    DIR="$REPO_DIR/$category"
+    if [ -d "$DIR" ]; then
+      COUNT=$(find "$DIR" -type f 2>/dev/null | wc -l | tr -d ' ')
+      echo "    $category/ ($COUNT files)"
+    fi
+  done
+}
+
+# --- Diff ---
+
+do_diff() {
+  if [ ! -d "$REPO_DIR/.git" ]; then
+    die "No git repo at $REPO_DIR. Run ./setup.sh first."
+  fi
+
+  # Snapshot live config to repo (without committing) to see what would change
+  if [ -f "$HOOK_PATH" ]; then
+    bash "$HOOK_PATH" < /dev/null 2>/dev/null || true
+  fi
+
+  # Show uncommitted changes + changes since last commit
+  STAGED=$(git -C "$REPO_DIR" diff --cached --stat 2>/dev/null)
+  UNSTAGED=$(git -C "$REPO_DIR" diff --stat 2>/dev/null)
+  UNTRACKED=$(git -C "$REPO_DIR" ls-files --others --exclude-standard 2>/dev/null)
+
+  if [ -z "$STAGED" ] && [ -z "$UNSTAGED" ] && [ -z "$UNTRACKED" ]; then
+    echo "No changes since last snapshot."
+  else
+    echo "Changes since last snapshot:"
+    echo ""
+    # Show the stat from the most recent commit (which was just created by snapshot)
+    git -C "$REPO_DIR" log -1 --stat --format="" 2>/dev/null
+  fi
+}
+
+# --- Log ---
+
+do_log() {
+  if [ ! -d "$REPO_DIR/.git" ]; then
+    die "No git repo at $REPO_DIR. Run ./setup.sh first."
+  fi
+
+  local count="${1:-10}"
+  git -C "$REPO_DIR" log --oneline --format="%C(dim)%ar%C(reset)  %s" -n "$count" 2>/dev/null || echo "No commits yet."
+}
+
 # --- Main ---
 
 case "${1:-}" in
-  --restore)  do_restore ;;
+  --restore)   do_restore ;;
   --uninstall) do_uninstall ;;
+  --status)    do_status ;;
+  --diff)      do_diff ;;
+  --log)       do_log "${2:-}" ;;
   --help|-h)
-    echo "Usage: ./setup.sh [--restore|--uninstall|--help]"
+    echo "Usage: ./setup.sh [OPTION]"
     echo ""
     echo "  (no args)     Install: register hooks, run first snapshot"
     echo "  --restore     Restore config from this repo to ~/.claude/"
     echo "  --uninstall   Remove hooks and clean up"
+    echo "  --status      Show snapshot health and what's tracked"
+    echo "  --diff        Show changes since last snapshot"
+    echo "  --log [N]     Show last N snapshots (default: 10)"
     ;;
   "") do_install ;;
   *) die "Unknown option: $1. Use --help for usage." ;;

@@ -7,10 +7,18 @@ CLAUDE_DIR="$HOME/.claude"
 REPO=$(cat "$CLAUDE_DIR/.snapshot-repo" 2>/dev/null)
 [ -d "$REPO/.git" ] || exit 0
 
-# PostToolUse filter: only trigger on plugin install/uninstall
-COMMAND=$(jq -r '.tool_input.command // ""' 2>/dev/null)
-if [ -n "$COMMAND" ]; then
-  echo "$COMMAND" | grep -qE 'claude plugin.*(install|uninstall)' || exit 0
+# PostToolUse filter: skip jq fork when no stdin (SessionStart path)
+COMMAND="" ACTION="" PLUGIN=""
+if [ ! -t 0 ]; then
+  INPUT=$(cat 2>/dev/null)
+  if [ -n "$INPUT" ]; then
+    COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""' 2>/dev/null)
+    if [ -n "$COMMAND" ]; then
+      echo "$COMMAND" | grep -qE 'claude plugin.*(install|uninstall)' || exit 0
+      ACTION=$(echo "$COMMAND" | grep -oE 'install|uninstall' | head -1)
+      PLUGIN=$(echo "$COMMAND" | grep -oE '[a-z_-]+@[a-z_-]+' | head -1)
+    fi
+  fi
 fi
 
 # --- Snapshot ---
@@ -48,7 +56,7 @@ done
   rsync -a --delete --include='*.sh' --exclude='*' "$CLAUDE_DIR/scripts/" "$REPO/scripts/" 2>/dev/null
 }
 
-# Skills
+# Skills (merged from two sources, no --delete since both write to same dest)
 [ -d "$CLAUDE_DIR/skills" ] && rsync -aL "$CLAUDE_DIR/skills/" "$REPO/skills/" 2>/dev/null
 [ -d "$HOME/.agents/skills" ] && rsync -aL "$HOME/.agents/skills/" "$REPO/skills/" 2>/dev/null
 
@@ -58,16 +66,23 @@ done
   rsync -a --delete "$CLAUDE_DIR/agents/" "$REPO/agents/" 2>/dev/null
 }
 
-# Memory (portable path extraction — no hardcoded username)
+# Memory (portable path extraction)
 for memdir in "$CLAUDE_DIR"/projects/*/memory; do
   [ -d "$memdir" ] || continue
   raw=$(basename "$(dirname "$memdir")")
-  # Extract last meaningful segment as project name
   # -Users-alice-Documents-projects-foo → foo
   project=$(echo "$raw" | rev | cut -d'-' -f1 | rev)
   [ -z "$project" ] && project="unknown"
   mkdir -p "$REPO/memory/$project"
   rsync -a "$memdir/" "$REPO/memory/$project/" 2>/dev/null
+done
+
+# --- Secret detection (single grep pass, warn only) ---
+for f in "$REPO"/config/settings.json "$REPO"/config/settings.local.json; do
+  [ -f "$f" ] || continue
+  if grep -qEi '"(api[_-]?key|secret[_-]?key|token|password|credential)"|(sk-ant-|sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{30,}|AKIA[A-Z0-9]{16})' "$f" 2>/dev/null; then
+    echo "[claude-snapshot] Warning: $(basename "$f") may contain secrets. Review before pushing." >&2
+  fi
 done
 
 # --- Commit if changed ---
@@ -77,12 +92,13 @@ git add -A
 if ! git diff --cached --quiet 2>/dev/null; then
   CHANGES=$(git diff --cached --stat | tail -1)
   MSG="auto: sync config ($CHANGES)"
-  if [ -n "$COMMAND" ]; then
-    PLUGIN=$(echo "$COMMAND" | grep -oE '[a-z_-]+@[a-z_-]+' | head -1)
-    ACTION=$(echo "$COMMAND" | grep -oE 'install|uninstall' | head -1)
-    [ -n "$ACTION" ] && MSG="auto: ${ACTION} ${PLUGIN} ($CHANGES)"
-  fi
+  [ -n "$ACTION" ] && MSG="auto: ${ACTION} ${PLUGIN} ($CHANGES)"
   git commit -m "$MSG" --no-verify 2>/dev/null
+
+  # Auto-push if enabled
+  if [ "${CLAUDE_SNAPSHOT_PUSH:-0}" = "1" ] && git remote get-url origin &>/dev/null; then
+    git push --quiet 2>/dev/null || true
+  fi
 fi
 
 exit 0
