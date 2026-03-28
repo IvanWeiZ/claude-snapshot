@@ -35,7 +35,14 @@ done
 # Plugin metadata
 mkdir -p "$REPO/config/plugins"
 for f in installed_plugins.json known_marketplaces.json blocklist.json; do
-  [ -f "$CLAUDE_DIR/plugins/$f" ] && cp "$CLAUDE_DIR/plugins/$f" "$REPO/config/plugins/"
+  [ -f "$CLAUDE_DIR/plugins/$f" ] || continue
+  if [ "$f" = "known_marketplaces.json" ] && command -v jq &>/dev/null; then
+    jq 'del(.[].lastUpdated)' "$CLAUDE_DIR/plugins/$f" > "$REPO/config/plugins/$f"
+  elif [ "$f" = "blocklist.json" ] && command -v jq &>/dev/null; then
+    jq 'del(.fetchedAt)' "$CLAUDE_DIR/plugins/$f" > "$REPO/config/plugins/$f"
+  else
+    cp "$CLAUDE_DIR/plugins/$f" "$REPO/config/plugins/"
+  fi
 done
 
 # Hooks
@@ -90,9 +97,26 @@ cd "$REPO"
 git add -A
 
 if ! git diff --cached --quiet 2>/dev/null; then
-  CHANGES=$(git diff --cached --stat | tail -1)
-  MSG="auto: sync config ($CHANGES)"
-  [ -n "$ACTION" ] && MSG="auto: ${ACTION} ${PLUGIN} ($CHANGES)"
+  # Build meaningful commit message from changed files
+  CHANGED_FILES=$(git diff --cached --name-only)
+  PARTS=()
+  echo "$CHANGED_FILES" | grep -q '^config/settings' && PARTS+=("settings")
+  echo "$CHANGED_FILES" | grep -q '^config/CLAUDE' && PARTS+=("CLAUDE.md")
+  echo "$CHANGED_FILES" | grep -q '^commands/' && PARTS+=("commands")
+  echo "$CHANGED_FILES" | grep -q '^skills/' && PARTS+=("skills")
+  echo "$CHANGED_FILES" | grep -q '^hooks/' && PARTS+=("hooks")
+  echo "$CHANGED_FILES" | grep -q '^agents/' && PARTS+=("agents")
+  echo "$CHANGED_FILES" | grep -q '^memory/' && PARTS+=("memory")
+  echo "$CHANGED_FILES" | grep -q '^config/plugins/installed' && PARTS+=("plugins")
+  echo "$CHANGED_FILES" | grep -q '^scripts/' && PARTS+=("scripts")
+
+  if [ -n "$ACTION" ]; then
+    MSG="auto: ${ACTION} ${PLUGIN}"
+  elif [ ${#PARTS[@]} -gt 0 ]; then
+    MSG="auto: update $(IFS=', '; echo "${PARTS[*]}")"
+  else
+    MSG="auto: sync config"
+  fi
   git commit -m "$MSG" --no-verify 2>/dev/null
 
   # Auto-push if enabled
