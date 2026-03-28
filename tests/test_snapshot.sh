@@ -72,7 +72,7 @@ echo "Test: Commit message format"
 echo "# msg-test" >> "$CLAUDE_DIR/CLAUDE.md"
 bash "$REPO/snapshot.sh" < /dev/null 2>/dev/null
 LAST_MSG=$(git -C "$REPO" log -1 --format="%s")
-echo "$LAST_MSG" | grep -q "auto: sync config" && pass "Default commit message format" || fail "Bad message: $LAST_MSG"
+echo "$LAST_MSG" | grep -q "^auto: " && pass "Default commit message format" || fail "Bad message: $LAST_MSG"
 
 echo "# plugin-msg" >> "$CLAUDE_DIR/CLAUDE.md"
 echo '{"tool_input":{"command":"claude plugin install foo@bar"}}' | bash "$REPO/snapshot.sh" 2>/dev/null

@@ -100,15 +100,15 @@ if ! git diff --cached --quiet 2>/dev/null; then
   # Build meaningful commit message from changed files
   CHANGED_FILES=$(git diff --cached --name-only)
   PARTS=()
-  echo "$CHANGED_FILES" | grep -q '^config/settings' && PARTS+=("settings")
-  echo "$CHANGED_FILES" | grep -q '^config/CLAUDE' && PARTS+=("CLAUDE.md")
-  echo "$CHANGED_FILES" | grep -q '^commands/' && PARTS+=("commands")
-  echo "$CHANGED_FILES" | grep -q '^skills/' && PARTS+=("skills")
-  echo "$CHANGED_FILES" | grep -q '^hooks/' && PARTS+=("hooks")
-  echo "$CHANGED_FILES" | grep -q '^agents/' && PARTS+=("agents")
-  echo "$CHANGED_FILES" | grep -q '^memory/' && PARTS+=("memory")
-  echo "$CHANGED_FILES" | grep -q '^config/plugins/installed' && PARTS+=("plugins")
-  echo "$CHANGED_FILES" | grep -q '^scripts/' && PARTS+=("scripts")
+  echo "$CHANGED_FILES" | grep -q '^config/settings' && PARTS+=("settings") || true
+  echo "$CHANGED_FILES" | grep -q '^config/CLAUDE' && PARTS+=("CLAUDE.md") || true
+  echo "$CHANGED_FILES" | grep -q '^commands/' && PARTS+=("commands") || true
+  echo "$CHANGED_FILES" | grep -q '^skills/' && PARTS+=("skills") || true
+  echo "$CHANGED_FILES" | grep -q '^hooks/' && PARTS+=("hooks") || true
+  echo "$CHANGED_FILES" | grep -q '^agents/' && PARTS+=("agents") || true
+  echo "$CHANGED_FILES" | grep -q '^memory/' && PARTS+=("memory") || true
+  echo "$CHANGED_FILES" | grep -q '^config/plugins/installed' && PARTS+=("plugins") || true
+  echo "$CHANGED_FILES" | grep -q '^scripts/' && PARTS+=("scripts") || true
 
   if [ -n "$ACTION" ]; then
     MSG="auto: ${ACTION} ${PLUGIN}"
