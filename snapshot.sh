@@ -57,22 +57,22 @@ for f in installed_plugins.json known_marketplaces.json blocklist.json; do
   fi
 done
 
-# Hooks
+# Hooks (NO --delete: never remove repo files when local is missing)
 [ -d "$CLAUDE_DIR/hooks" ] && {
   mkdir -p "$REPO/hooks"
-  rsync -a --delete --include='*.sh' --exclude='*' "$CLAUDE_DIR/hooks/" "$REPO/hooks/" 2>/dev/null
+  rsync -a --include='*.sh' --exclude='*' "$CLAUDE_DIR/hooks/" "$REPO/hooks/" 2>/dev/null
 }
 
-# Commands
+# Commands (NO --delete: never remove repo files when local is missing)
 [ -d "$CLAUDE_DIR/commands" ] && {
   mkdir -p "$REPO/commands"
-  rsync -a --delete --include='*.md' --exclude='*' "$CLAUDE_DIR/commands/" "$REPO/commands/" 2>/dev/null
+  rsync -a --include='*.md' --exclude='*' "$CLAUDE_DIR/commands/" "$REPO/commands/" 2>/dev/null
 }
 
-# Scripts
+# Scripts (NO --delete: never remove repo files when local is missing)
 [ -d "$CLAUDE_DIR/scripts" ] && {
   mkdir -p "$REPO/scripts"
-  rsync -a --delete --include='*.sh' --exclude='*' "$CLAUDE_DIR/scripts/" "$REPO/scripts/" 2>/dev/null
+  rsync -a --include='*.sh' --exclude='*' "$CLAUDE_DIR/scripts/" "$REPO/scripts/" 2>/dev/null
 }
 
 # Skills (merged from two sources, no --delete since both write to same dest)
@@ -80,10 +80,10 @@ done
 [ -d "$CLAUDE_DIR/skills" ] && rsync -aL --exclude='settings.local.json' "$CLAUDE_DIR/skills/" "$REPO/skills/" 2>/dev/null
 [ -d "$HOME/.agents/skills" ] && rsync -aL --exclude='settings.local.json' "$HOME/.agents/skills/" "$REPO/skills/" 2>/dev/null
 
-# Agents
+# Agents (NO --delete: never remove repo files when local is missing)
 [ -d "$CLAUDE_DIR/agents" ] && {
   mkdir -p "$REPO/agents"
-  rsync -a --delete "$CLAUDE_DIR/agents/" "$REPO/agents/" 2>/dev/null
+  rsync -a "$CLAUDE_DIR/agents/" "$REPO/agents/" 2>/dev/null
 }
 
 # Memory (portable path extraction)
