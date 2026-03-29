@@ -76,8 +76,9 @@ done
 }
 
 # Skills (merged from two sources, no --delete since both write to same dest)
-[ -d "$CLAUDE_DIR/skills" ] && rsync -aL "$CLAUDE_DIR/skills/" "$REPO/skills/" 2>/dev/null
-[ -d "$HOME/.agents/skills" ] && rsync -aL "$HOME/.agents/skills/" "$REPO/skills/" 2>/dev/null
+# Exclude nested settings.local.json (local permission files, not portable)
+[ -d "$CLAUDE_DIR/skills" ] && rsync -aL --exclude='settings.local.json' "$CLAUDE_DIR/skills/" "$REPO/skills/" 2>/dev/null
+[ -d "$HOME/.agents/skills" ] && rsync -aL --exclude='settings.local.json' "$HOME/.agents/skills/" "$REPO/skills/" 2>/dev/null
 
 # Agents
 [ -d "$CLAUDE_DIR/agents" ] && {
