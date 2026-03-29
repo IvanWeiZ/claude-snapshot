@@ -21,6 +21,18 @@ if [ ! -t 0 ]; then
   fi
 fi
 
+# --- Auto-sync: pull repo → local for missing files (SessionStart only) ---
+if [ -z "$COMMAND" ]; then
+  # Skills: fill in any files that exist in repo but not locally
+  [ -d "$REPO/skills" ] && rsync -a --ignore-existing "$REPO/skills/" "$CLAUDE_DIR/skills/" 2>/dev/null
+  # Commands
+  [ -d "$REPO/commands" ] && rsync -a --ignore-existing --include='*.md' --exclude='*' "$REPO/commands/" "$CLAUDE_DIR/commands/" 2>/dev/null
+  # Hooks
+  [ -d "$REPO/hooks" ] && rsync -a --ignore-existing --include='*.sh' --exclude='*' "$REPO/hooks/" "$CLAUDE_DIR/hooks/" 2>/dev/null
+  # Agents
+  [ -d "$REPO/agents" ] && rsync -a --ignore-existing "$REPO/agents/" "$CLAUDE_DIR/agents/" 2>/dev/null
+fi
+
 # --- Snapshot ---
 
 # Config files (settings + all .md files in root)

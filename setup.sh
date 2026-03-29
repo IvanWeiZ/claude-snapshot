@@ -146,11 +146,33 @@ do_restore() {
     echo "  Restored scripts"
   fi
 
+  # Skills (recursive — includes nested .claude/skills/ dirs)
+  if [ -d "$REPO_DIR/skills" ]; then
+    mkdir -p "$CLAUDE_DIR/skills"
+    rsync -a "$REPO_DIR/skills/" "$CLAUDE_DIR/skills/"
+    echo "  Restored skills"
+  fi
+
   # Agents
   if [ -d "$REPO_DIR/agents" ]; then
     mkdir -p "$CLAUDE_DIR/agents"
     rsync -a "$REPO_DIR/agents/" "$CLAUDE_DIR/agents/"
     echo "  Restored agents"
+  fi
+
+  # Memory (reverse the portable path mapping from snapshot.sh)
+  if [ -d "$REPO_DIR/memory" ]; then
+    for memdir in "$REPO_DIR"/memory/*/; do
+      [ -d "$memdir" ] || continue
+      project=$(basename "$memdir")
+      # Find the matching project dir in ~/.claude/projects/
+      target=$(find "$CLAUDE_DIR/projects" -maxdepth 1 -type d -name "*-$project" 2>/dev/null | head -1)
+      if [ -n "$target" ]; then
+        mkdir -p "$target/memory"
+        rsync -a "$memdir" "$target/memory/"
+      fi
+    done
+    echo "  Restored memory"
   fi
 
   install_hook
@@ -305,8 +327,57 @@ do_log() {
 
 # --- Main ---
 
+# --- Sync (pull missing files from repo to local) ---
+
+do_sync() {
+  check_prereqs
+
+  echo "Syncing repo → local ~/.claude/ ..."
+
+  # Skills
+  if [ -d "$REPO_DIR/skills" ]; then
+    mkdir -p "$CLAUDE_DIR/skills"
+    rsync -a "$REPO_DIR/skills/" "$CLAUDE_DIR/skills/"
+    echo "  Synced skills/"
+  fi
+
+  # Commands
+  if [ -d "$REPO_DIR/commands" ]; then
+    mkdir -p "$CLAUDE_DIR/commands"
+    rsync -a --include='*.md' --exclude='*' "$REPO_DIR/commands/" "$CLAUDE_DIR/commands/"
+    echo "  Synced commands/"
+  fi
+
+  # Hooks
+  if [ -d "$REPO_DIR/hooks" ]; then
+    mkdir -p "$CLAUDE_DIR/hooks"
+    rsync -a --include='*.sh' --exclude='*' "$REPO_DIR/hooks/" "$CLAUDE_DIR/hooks/"
+    chmod +x "$CLAUDE_DIR"/hooks/*.sh 2>/dev/null
+    echo "  Synced hooks/"
+  fi
+
+  # Agents
+  if [ -d "$REPO_DIR/agents" ]; then
+    mkdir -p "$CLAUDE_DIR/agents"
+    rsync -a "$REPO_DIR/agents/" "$CLAUDE_DIR/agents/"
+    echo "  Synced agents/"
+  fi
+
+  # Config files
+  if [ -d "$REPO_DIR/config" ]; then
+    for f in "$REPO_DIR"/config/*.md; do
+      [ -f "$f" ] && cp "$f" "$CLAUDE_DIR/"
+    done
+    echo "  Synced config/"
+  fi
+
+  echo ""
+  echo "Done. Local ~/.claude/ is in sync with repo."
+}
+
 case "${1:-}" in
   --restore)   do_restore ;;
+  --sync)      do_sync ;;
   --uninstall) do_uninstall ;;
   --status)    do_status ;;
   --diff)      do_diff ;;
@@ -316,6 +387,7 @@ case "${1:-}" in
     echo ""
     echo "  (no args)     Install: register hooks, run first snapshot"
     echo "  --restore     Restore config from this repo to ~/.claude/"
+    echo "  --sync        Pull missing files from repo to local (non-destructive)"
     echo "  --uninstall   Remove hooks and clean up"
     echo "  --status      Show snapshot health and what's tracked"
     echo "  --diff        Show changes since last snapshot"
